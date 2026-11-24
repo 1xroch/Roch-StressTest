@@ -3,7 +3,6 @@ name: build
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -12,94 +11,110 @@ permissions:
 
 jobs:
   windows:
-    # The self-test builds every tab and preset against the tool folders in this repository, then
-    # PyInstaller makes the exe. Nothing is run against hardware: there is none on a runner.
+    # Lint, the tests (including the self-test, which builds every preset and Quick Start button
+    # against the tool folders in this repository), then the release exe and the zip with the tools
+    # beside it. Nothing is run against hardware: there is none on a runner.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install the build requirements
-        run: python -m pip install -r requirements.txt
-      - name: Self-test
-        run: python selftest.py
-      - name: Build RochStressTest.exe
-        run: python -m PyInstaller -y RochStressTest.spec
-      - name: Package
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component clippy
+
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run the tests
+        run: cargo test --locked
+
+      - name: Build and package
         shell: pwsh
         run: |
-          $version = (Select-String -Path core/version.py -Pattern '__version__ = "(.*)"').Matches[0].Groups[1].Value
+          cargo build --release --locked
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
           # The same layout as 1.0.0's zip: one RochStressTest folder, the exe and the tools in it.
           $dir = "RochStressTest"
           New-Item -ItemType Directory -Path $dir | Out-Null
-          Copy-Item dist/RochStressTest.exe $dir/
+          Copy-Item target/release/RochStressTest.exe $dir/
           foreach ($item in 'p95v3019b20.win64', 'y-cruncher v0.8.7.9547b', 'TestMem5', 'ram_test_pro_1.5.0',
                             'LinpackXtreme-1.1.7', 'Linpack-Extended-master', 'memtest_vulkan', 'README.md', 'LICENSE') {
             Copy-Item -Recurse $item $dir/
           }
-          New-Item -ItemType Directory -Path dist-zip | Out-Null
-          Compress-Archive -Path $dir -DestinationPath "dist-zip/RochStressTest-$version.zip"
-          Copy-Item dist/RochStressTest.exe dist-zip/
-          Get-ChildItem dist-zip
+          # A windows-subsystem exe is not waited for by `&`, so it is started and waited on.
+          $run = Start-Process -FilePath "$dir/RochStressTest.exe" -ArgumentList '--selftest' -Wait -PassThru -NoNewWindow -RedirectStandardOutput selftest.txt
+          Get-Content selftest.txt
+          if ($run.ExitCode -ne 0) { throw "The packaged program's self-test failed" }
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Compress-Archive -Path $dir -DestinationPath "dist/RochStressTest-$version.zip"
+          Copy-Item target/release/RochStressTest.exe dist/
+          Get-ChildItem dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: roch-stresstest-windows
-          path: dist-zip/
+          path: dist/
           if-no-files-found: error
 
   linux:
-    # Built in Ubuntu 22.04 so the binary runs on glibc 2.35 and newer. Python 3.13 and its Tk come
-    # from the deadsnakes archive; Ubuntu's Tk draws with Xft, which CustomTkinter's rounded shapes
-    # and arrows need. The Linux tools are fetched from their authors' sites and checked by hash.
+    # Built in Ubuntu 22.04 so the binary runs on glibc 2.35 and newer; the window's system libraries
+    # are loaded at run time. The Linux tools are fetched from their authors' sites, checked by hash.
     runs-on: ubuntu-latest
     container: ubuntu:22.04
-    env:
-      DEBIAN_FRONTEND: noninteractive
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Install Python 3.13 with Tk, and what the build uses
+      - name: Install the compiler, and what the steps below use
         run: |
-          apt-get update -q
-          apt-get install -y -q software-properties-common
-          add-apt-repository -y ppa:deadsnakes/ppa
-          apt-get update -q
-          apt-get install -y -q python3.13 python3.13-venv python3.13-tk binutils curl xz-utils \
-            xvfb xauth fontconfig fonts-dejavu-core git
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl gcc git libc6-dev binutils pkg-config xz-utils
+
       - uses: actions/checkout@v4
-      - name: Install the build requirements
+
+      - name: Install Rust
         run: |
-          python3.13 -m venv /opt/venv
-          /opt/venv/bin/python -m pip install -q -r requirements.txt
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component clippy --component rustfmt
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-22.04
+
       - name: Fetch the Linux tools
         run: packaging/linux/fetch-tools.sh
-      - name: Self-test
-        run: xvfb-run -a /opt/venv/bin/python selftest.py
+
+      - name: Format and lint
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run the tests
+        run: cargo test --locked
+
       - name: Build and package
         run: |
-          /opt/venv/bin/python -m PyInstaller -y RochStressTest.spec
-          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' core/version.py)
+          cargo build --release --locked
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          # Only the C library and what every Linux has: the window's libraries load at run time.
+          ! ldd target/release/RochStressTest | grep -vE 'linux-vdso|ld-linux|libc\.so|libm\.so|libgcc_s\.so'
           dir="RochStressTest-$version-linux-x86_64"
-          mkdir -p "$dir" dist-linux
-          install -m755 dist/RochStressTest "$dir/RochStressTest"
+          mkdir -p "$dir" dist
+          install -m755 target/release/RochStressTest "$dir/RochStressTest"
           packaging/linux/fetch-tools.sh "$dir"
           install -m755 packaging/linux/install.sh "$dir/install.sh"
           install -m644 packaging/linux/RochStressTest.desktop "$dir/RochStressTest.desktop"
-          install -m644 icon.png "$dir/RochStressTest.png"
+          install -m644 assets/icon.png "$dir/RochStressTest.png"
           cp README.md LICENSE "$dir/"
-          # The packaged program must start and stay up: a missing module ends it at once.
-          set +e
-          xvfb-run -a timeout 15 "$dir/RochStressTest" > smoke.log 2>&1
-          code=$?
-          set -e
-          cat smoke.log
-          [ "$code" = 124 ] || { echo "RochStressTest exited with $code during the smoke test"; exit 1; }
-          ! grep -q Traceback smoke.log
-          tar -czf "dist-linux/$dir.tar.gz" "$dir"
-          ls -l dist-linux
+          "$dir/RochStressTest" --selftest
+          tar -czf "dist/$dir.tar.gz" "$dir"
+          ls -l dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: roch-stresstest-linux
-          path: dist-linux/
+          path: dist/
           if-no-files-found: error

@@ -7,4 +7,4 @@ Exec=rochstresstest
 Icon=RochStressTest
 Terminal=false
 Categories=System;Utility;
-StartupWMClass=Rochstresstest
+StartupWMClass=RochStressTest

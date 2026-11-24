@@ -10,7 +10,7 @@ One window for every stress test on your PC. It starts each test with sensible d
 2. Unzip it to a folder you own.
 3. Run `RochStressTest.exe` and allow administrator access.
 
-Windows 10/11 x64. No Python needed. Cinebench and OCCT are too large to include. Get them from [Maxon](https://www.maxon.net/en/downloads/cinebench-downloads) and [OCBase](https://www.ocbase.com/download), and put them next to the app.
+Windows 10/11 x64. One executable, nothing to install. Cinebench and OCCT are too large to include. Get them from [Maxon](https://www.maxon.net/en/downloads/cinebench-downloads) and [OCBase](https://www.ocbase.com/download), and put them next to the app.
 
 ### Linux
 
@@ -24,7 +24,15 @@ x86-64, glibc 2.35 or newer (Ubuntu 22.04, Fedora 36, current Arch). On Linux it
 - **Quick Start:** one click runs any tool's defaults.
 - **y-cruncher and Linpack Extended:** build and save your own profiles.
 - **TestMem5, RAM Test Pro, Prime95, OCCT, Cinebench, memtest_vulkan, Linpack Xtreme, 3DMark 11:** launched and watched for errors.
-- **Memory cleaner** (Windows) and light/dark mode.
+- **Memory cleaner** (Windows), a **Stop** button for any run, and light/dark mode.
+
+## Build
+
+```console
+cargo build --release
+```
+
+Put `RochStressTest` (`.exe` on Windows) next to the tool folders. On Linux, `packaging/linux/fetch-tools.sh` downloads the Linux tool builds beside it. `RochStressTest --selftest` builds every preset and Quick Start button without running anything. [docs/reference.md](docs/reference.md) has the details.
 
 ## Credits
 
@@ -36,7 +44,7 @@ x86-64, glibc 2.35 or newer (Ubuntu 22.04, Fedora 36, current Arch). On Linux it
 - **Regeneration — [Linpack Xtreme](https://www.ngohq.com/linpack-xtreme.html)**
 - **GpuZelenograd — [memtest_vulkan](https://github.com/GpuZelenograd/memtest_vulkan)**
 - **OCBase — [OCCT](https://www.ocbase.com/)**, **Maxon — [Cinebench](https://www.maxon.net/en/cinebench)**, **UL — 3DMark 11**
-- **Tom Schimansky — [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)**
+- **[egui](https://github.com/emilk/egui)** for the window
 
 Created by **Roch Studio / [@MateoPCTech](https://x.com/MateoPCTech)**. Licensed GPL-3.0; bundled tools keep their own licenses.
 

@@ -1,9 +1,5 @@
-__pycache__/
-*.py[cod]
-build/
+/target/
 dist/
-.venv/
-venv/
 .idea/
 .vscode/
 *.log

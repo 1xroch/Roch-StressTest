@@ -1,0 +1,61 @@
+[package]
+name = "roch-stresstest"
+# The one place the version is written: the window title, the file properties
+# of the Windows executable (build.rs) and the run logs read it from here.
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "One window for every stress test on the machine"
+license = "GPL-3.0-or-later"
+authors = ["Roch Studio"]
+repository = "https://github.com/1xroch/Roch-StressTest"
+build = "build.rs"
+default-run = "RochStressTest"
+
+[lib]
+name = "roch_stresstest"
+path = "src/lib.rs"
+
+[[bin]]
+name = "RochStressTest"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+glob = "0.3"
+regex = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+
+# The window.
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+open = "5"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Wayland and X11, loaded at run time.
+eframe = { version = "0.37", default-features = false, features = ["wayland", "x11"] }
+libc = "0.2"
+
+[build-dependencies]
+embed-resource = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

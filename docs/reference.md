@@ -1,35 +1,26 @@
 # Roch StressTest — detailed reference
 
-**Roch StressTest** — one window for every stress test on the machine. Prime95, y-cruncher, TestMem5, RAM Test Pro, both Linpacks, OCCT, Cinebench, memtest_vulkan and 3DMark 11, each with presets that say what they actually do, a time limit, and live failure detection. Python 3.13 / CustomTkinter, same theme as [Roch Viewer](https://github.com/1xroch/Roch-Viewer) and [Roch GPU OC](https://github.com/1xroch/Roch-GPU).
+**Roch StressTest** — one window for every stress test on the machine. Prime95, y-cruncher, TestMem5, RAM Test Pro, both Linpacks, OCCT, Cinebench, memtest_vulkan and 3DMark 11, each with presets that say what they actually do, a time limit, and live failure detection. Rust and egui, one executable, same theme as [Roch Viewer](https://github.com/1xroch/Roch-Viewer) and [Roch GPU OC](https://github.com/1xroch/Roch-GPU).
 
 It does not implement a single test. Every tool runs exactly as it would if you started it yourself; what this adds is the part they leave to you.
 
 ```
 Roch StressTest/
-|- main.py                 the window: Quick Start, tool cards, log
-|- selftest.py             builds every preset and checks the defaults agree
-|
-|- core/                   running a test and knowing what the machine is
-|   |- runner.py           starts a test, watches it, enforces the time limit
-|   |- errors.py           the patterns that decide a run has failed
-|   |- toolbase.py         what every tool adapter is made of
-|   |- hardware.py         cores, RAM and CPU vendor, for the defaults
-|   |- memory.py           the memory cleaner and the live RAM readout
-|   |- settings.py         where runs, logs and settings are kept
-|   |- system.py           what differs between Windows and Linux
-|   |- winui.py            finding a running tool's windows (Windows)
-|   \- version.py          the product name and version, written once
-|
-|- app/                    how it is drawn
-|   |- theme.py            the shared Roch palette
-|   \- widgets.py          the field/section widgets the cards are built from
-|
-|- tools/                  one adapter per tool
-|   |- __init__.py         the registry, and the Quick Start columns
-|   \- prime95.py, ycruncher.py, testmem5.py, ramtest.py, linpack.py,
-|                          occt.py, cinebench.py, memtest_vulkan.py,
-|                          threedmark11.py
-|
+|- Cargo.toml              the version, written once
+|- src/
+|   |- main.rs             start-up: --selftest, --tab, elevation on Windows
+|   |- gui/                the window: Quick Start, tool tabs, log, status strip
+|   |- runner.rs           starts a test, watches it, enforces the time limit
+|   |- errors.rs           the patterns that decide a run has failed
+|   |- tool.rs             what every tool adapter is made of
+|   |- tools/              one adapter per tool, and the registry (mod.rs)
+|   |- hardware.rs         cores, RAM and CPU vendor, for the defaults
+|   |- memory.rs           the memory cleaner and the live RAM readout
+|   |- settings.rs         where runs, logs and settings are kept
+|   |- system.rs           what differs between Windows and Linux
+|   |- winui.rs            finding a running tool's windows (Windows)
+|   \- selftest.rs         builds every preset and Quick Start button
+|- tests/                  the self-test, and the runner against the real tools
 |- packaging/linux/        fetch-tools.sh, install.sh, the launcher entry
 |
 \- <tool folders>          Prime95, y-cruncher, TestMem5, RAM Test Pro,
@@ -41,13 +32,19 @@ Roch StressTest/
 
 ## Run it
 
-```bat
-RUN_AS_ADMIN.bat
+Download a release, or build it:
+
+```console
+cargo build --release
 ```
 
-Or build a standalone EXE with `BUILD_EXE.bat` and copy `dist\RochStressTest.exe` up one level, next to the tool folders — it looks for them beside itself.
+and put `RochStressTest.exe` (Linux: `RochStressTest`) next to the tool folders -- it looks for them beside itself. Run from `target/release` it uses the repository it was built from. `ROCH_STRESSTEST_TOOLS` names another folder.
 
-Administrator rights are asked for once at launch. TestMem5 and RAM Test Pro need them to lock physical pages, Prime95 to set affinity. Asking once beats a tool failing three hours into a run for want of a privilege.
+On Windows, administrator rights are asked for once at launch. TestMem5 and RAM Test Pro need them to lock physical pages, Prime95 to set affinity. Asking once beats a tool failing three hours into a run for want of a privilege. `--no-elevate` skips the prompt.
+
+- `RochStressTest --selftest` builds every preset and Quick Start button without running anything, and exits non-zero if one fails. `cargo test` runs it too.
+- `RochStressTest --tab y-cruncher` opens on that tab.
+- `cargo test --test real_tools -- --ignored --test-threads=1` (Linux, on a desktop, with the tools fetched) runs the runner against the real tools: terminal windows, time limits, Stop, a closed window, an injected failure, and no process left behind.
 
 ### Getting Cinebench and OCCT
 
@@ -126,7 +123,7 @@ And KMP_AFFINITY decides whether the Threads field means anything, which is why 
 
 The toolbar carries a live `RAM x / y MB free` readout and a **Clean memory** button, because a memory test only tests the memory it can actually get. Windows counts its standby list — pages it has finished with but is holding in case they are wanted again — as used, so on a machine that has been up a while, asking for 28 GB quietly takes part of it from the page file and the run measures an SSD rather than the DIMMs.
 
-Cleaning empties every process's working set, then purges the standby and low-priority standby lists, through `NtSetSystemInformation` with `SystemMemoryListInformation`. That needs `SeProfileSingleProcessPrivilege`, which an administrator has but which is *not* enabled in the token until it is asked for. It is implemented in `memory.py` rather than bundling a third-party binary; the approach was checked against danskee's Memory Cleaner, whose DLL exports one `CleanMemory` and imports exactly those three calls.
+Cleaning empties every process's working set, then purges the standby and low-priority standby lists, through `NtSetSystemInformation` with `SystemMemoryListInformation`. That needs `SeProfileSingleProcessPrivilege`, which an administrator has but which is *not* enabled in the token until it is asked for. It is implemented in `memory.rs` rather than bundling a third-party binary; the approach was checked against danskee's Memory Cleaner, whose DLL exports one `CleanMemory` and imports exactly those three calls.
 
 Nothing about it is destructive: the purged pages are cached copies of data already on disk, re-read if wanted again.
 
@@ -167,13 +164,15 @@ A tool that finishes on its own is left on screen rather than killed, so y-crunc
 
 An exit is judged on what the tool said, not just on its exit code. Windows gives a console process exit code `0xC000013A` when it is sent Ctrl+C or its window is closed; that says nothing about the machine, so it is reported as stopped, never as a failure. A clean exit from a tool that announces its own completion, *without* that announcement, is also stopped rather than passed — closing a window mid-run is not a pass. A real failure still wins over both: the error line is checked first.
 
+**Stop**, in the status strip while a run is going, ends it the way a time limit does: the whole process tree is stopped and the run is reported as stopped.
+
 A failure kills the process tree, beeps, switches to the Log tab, and writes a transcript to `%LOCALAPPDATA%\RochStressTest\logs\FAILED-<timestamp>.txt` — because the run that matters is the one that failed at 4am.
 
 ## Five things found while building this
 
 All are handled in the code; they are written down because each cost an afternoon and none is documented anywhere obvious.
 
-**Prime95 torture settings do not live in `local.txt`.** Every reference, including Prime95's own `undoc.txt`, says they do. In 30.19 that is a migration path: give it a `local.txt` and it folds those keys into `prime.txt`, deletes `local.txt`, and carries on. `tool_prime95.py` writes `prime.txt` directly -- these days only the four keys that suppress its startup prompts, but the same applies to anything put there. Verifiable — ask for `MinTortureFFT=MaxTortureFFT=1024` and `results.txt` says `Self-test 1024K passed!` and nothing else.
+**Prime95 torture settings do not live in `local.txt`.** Every reference, including Prime95's own `undoc.txt`, says they do. In 30.19 that is a migration path: give it a `local.txt` and it folds those keys into `prime.txt`, deletes `local.txt`, and carries on. The Prime95 adapter writes `prime.txt` directly -- these days only the four keys that suppress its startup prompts, but the same applies to anything put there. Verifiable — ask for `MinTortureFFT=MaxTortureFFT=1024` and `results.txt` says `Self-test 1024K passed!` and nothing else.
 
 **Linpack needs `MKL_DEBUG_CPU_TYPE=5` on Zen 5, and the two packages are not interchangeable.** Without it `linpack_amd64.exe` dies with an illegal instruction before printing a single result row — its kernel dispatch picks a path the CPU does not implement. The documented `MKL_ENABLE_INSTRUCTIONS=AVX2` does not fix it; only this does. The Intel-branded builds (`linpack_intel64.exe`, and Linpack Extended's `linpack_xeon64.exe`) refuse to run on AMD at all: they print "runs on only genuine Intel processors" and exit with status **zero**, so nothing is tested and nothing looks wrong. Linpack Xtreme ships an AMD build and is the one to use there; Linpack Extended is a separate tool that refuses to start on AMD rather than pretending to run.
 
@@ -185,7 +184,7 @@ The dialog cannot be steered any other way, because it does not read `prime.txt`
 
 Both of those are why Prime95 has no tab here. A tab of FFT sizes and memory figures could not be shown to agree with what Prime95 was going to do -- the numbers differ per machine, and the dialog contradicts them on sight. Quick Start opens Prime95 with that dialog up and lets it be answered in the one place that decides it. `results.txt` is still watched, so a worker that fails at 4am is still caught.
 
-**TestMem5 does write a log.** It is generally taken as read that TM5's error count exists only on its own window. In 0.13.1 it also appends to `Log.txt` beside `TM5.exe` — the configuration it loaded, the memory it took, every error, and how the run ended — so a TM5 failure at 3am is catchable after all. The patterns in `errors.TESTMEM5` are TM5's own message templates, read out of the strings in `TM5.exe` and `TM5.dll` rather than guessed, including the ones that must *not* count: TM5 separates a failure of the memory under test from a failure of TM5 itself (`Failed to allocate memory for testing`, `WARNING! Failed to lock memory`) and says outright, "This is not a failure of tested memory."
+**TestMem5 does write a log.** It is generally taken as read that TM5's error count exists only on its own window. In 0.13.1 it also appends to `Log.txt` beside `TM5.exe` — the configuration it loaded, the memory it took, every error, and how the run ended — so a TM5 failure at 3am is catchable after all. The TestMem5 patterns in `errors.rs` are TM5's own message templates, read out of the strings in `TM5.exe` and `TM5.dll` rather than guessed, including the ones that must *not* count: TM5 separates a failure of the memory under test from a failure of TM5 itself (`Failed to allocate memory for testing`, `WARNING! Failed to lock memory`) and says outright, "This is not a failure of tested memory."
 
 **TestMem5 0.13.1 does not take a `.cfg` path, and does not exit when it finishes.** Two separate traps, both fatal to a launcher.
 
