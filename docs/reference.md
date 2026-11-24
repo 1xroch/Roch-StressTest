@@ -1,6 +1,6 @@
 # Roch StressTest — detailed reference
 
-**Roch StressTest** — one window for every stress test on the machine. Prime95, y-cruncher, TestMem5, RAM Test Pro, both Linpacks, OCCT, Cinebench, memtest_vulkan and 3DMark 11, each with presets that say what they actually do, a time limit, and live failure detection. Python 3.13 / CustomTkinter, same theme as [Roch Viewer](https://github.com/RochStudio/Roch-Viewer) and [Roch GPU OC](https://github.com/RochStudio/Roch-GPU).
+**Roch StressTest** — one window for every stress test on the machine. Prime95, y-cruncher, TestMem5, RAM Test Pro, both Linpacks, OCCT, Cinebench, memtest_vulkan and 3DMark 11, each with presets that say what they actually do, a time limit, and live failure detection. Python 3.13 / CustomTkinter, same theme as [Roch Viewer](https://github.com/1xroch/Roch-Viewer) and [Roch GPU OC](https://github.com/1xroch/Roch-GPU).
 
 It does not implement a single test. Every tool runs exactly as it would if you started it yourself; what this adds is the part they leave to you.
 

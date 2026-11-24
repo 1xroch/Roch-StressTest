@@ -4,7 +4,7 @@ One window for every stress test on your PC. It starts each test with sensible d
 
 ## Install
 
-1. Download `RochStressTest-<version>.zip` from [Releases](https://github.com/RochStudio/Roch-StressTest/releases).
+1. Download `RochStressTest-<version>.zip` from [Releases](https://github.com/1xroch/Roch-StressTest/releases).
 2. Unzip it to a folder you own.
 3. Run `RochStressTest.exe` and allow administrator access.
 
