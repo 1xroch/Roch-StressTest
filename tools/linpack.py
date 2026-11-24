@@ -184,6 +184,8 @@ class LinpackXtreme(_Linpack):
     """
 
     key = "linpack_xtreme"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "Linpack Xtreme"
     blurb = (
         "The heaviest sustained AVX load of the set, and the quickest way to "
@@ -258,6 +260,8 @@ class LinpackExtended(_Linpack):
     """
 
     key = "linpack_extended"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "Linpack Extended"
     blurb = (
         "The same Intel benchmark from the Linpack Extended package. Intel "

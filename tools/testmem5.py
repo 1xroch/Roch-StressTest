@@ -48,6 +48,8 @@ DEFAULT_SETTINGS = (
 
 class TestMem5(Tool):
     key = "testmem5"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "TestMem5"
     blurb = (
         "The memory test overclockers actually use. The anta777 profiles are "

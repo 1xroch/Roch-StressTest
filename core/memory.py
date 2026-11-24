@@ -33,10 +33,13 @@ import ctypes
 from ctypes import wintypes
 
 from core import hardware
+from core import system
 
-_NTDLL = ctypes.WinDLL("ntdll", use_last_error=True)
-_ADVAPI32 = ctypes.WinDLL("advapi32", use_last_error=True)
-_KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+# Linux has nothing to clean. Its free-memory figure, MemAvailable, already
+# counts the page cache as available -- the kernel hands it over the moment an
+# allocation wants it -- so the standby-list problem this solves on Windows
+# does not exist there, and the window offers no button for it.
+SUPPORTED = system.WINDOWS
 
 # SYSTEM_INFORMATION_CLASS
 SYSTEM_MEMORY_LIST_INFORMATION = 0x0050
@@ -67,30 +70,35 @@ class _TOKEN_PRIVILEGES(ctypes.Structure):
     ]
 
 
-# Declared, not left to ctypes' defaults. Without these the process handle
-# from GetCurrentProcess is marshalled as a 32-bit int, OpenProcessToken gets
-# a truncated handle, and the whole sequence fails with no error worth the
-# name -- it simply reports the privilege was not enabled. Every call below
-# was checked against a real elevated run before this file was trusted.
-_KERNEL32.GetCurrentProcess.restype = wintypes.HANDLE
-_KERNEL32.CloseHandle.argtypes = [wintypes.HANDLE]
-_ADVAPI32.OpenProcessToken.argtypes = [
-    wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE),
-]
-_ADVAPI32.OpenProcessToken.restype = wintypes.BOOL
-_ADVAPI32.LookupPrivilegeValueW.argtypes = [
-    wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.POINTER(_LUID),
-]
-_ADVAPI32.LookupPrivilegeValueW.restype = wintypes.BOOL
-_ADVAPI32.AdjustTokenPrivileges.argtypes = [
-    wintypes.HANDLE, wintypes.BOOL, ctypes.POINTER(_TOKEN_PRIVILEGES),
-    wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p,
-]
-_ADVAPI32.AdjustTokenPrivileges.restype = wintypes.BOOL
-_NTDLL.NtSetSystemInformation.argtypes = [
-    ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong,
-]
-_NTDLL.NtSetSystemInformation.restype = ctypes.c_long
+if SUPPORTED:
+    _NTDLL = ctypes.WinDLL("ntdll", use_last_error=True)
+    _ADVAPI32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    _KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    # Declared, not left to ctypes' defaults. Without these the process handle
+    # from GetCurrentProcess is marshalled as a 32-bit int, OpenProcessToken gets
+    # a truncated handle, and the whole sequence fails with no error worth the
+    # name -- it simply reports the privilege was not enabled. Every call below
+    # was checked against a real elevated run before this file was trusted.
+    _KERNEL32.GetCurrentProcess.restype = wintypes.HANDLE
+    _KERNEL32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _ADVAPI32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE),
+    ]
+    _ADVAPI32.OpenProcessToken.restype = wintypes.BOOL
+    _ADVAPI32.LookupPrivilegeValueW.argtypes = [
+        wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.POINTER(_LUID),
+    ]
+    _ADVAPI32.LookupPrivilegeValueW.restype = wintypes.BOOL
+    _ADVAPI32.AdjustTokenPrivileges.argtypes = [
+        wintypes.HANDLE, wintypes.BOOL, ctypes.POINTER(_TOKEN_PRIVILEGES),
+        wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p,
+    ]
+    _ADVAPI32.AdjustTokenPrivileges.restype = wintypes.BOOL
+    _NTDLL.NtSetSystemInformation.argtypes = [
+        ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong,
+    ]
+    _NTDLL.NtSetSystemInformation.restype = ctypes.c_long
 
 
 def enable_privilege(name):
@@ -182,6 +190,8 @@ def clean():
     a stress test from starting.
     """
     before = hardware.available_ram_mb()
+    if not SUPPORTED:
+        return Result(before, before, [], [label for label, _ in STEPS])
     enable_privilege("SeProfileSingleProcessPrivilege")
     enable_privilege("SeIncreaseQuotaPrivilege")
 

@@ -6,15 +6,45 @@ fits. Reading them wrong is worse than not reading them -- a Linpack size
 chosen from an over-reported free-memory figure swaps rather than stresses --
 so each one falls back to a conservative answer rather than a guess.
 
-No third-party dependency: everything here is ctypes against kernel32 plus one
-registry read.
+No third-party dependency: on Windows everything here is ctypes against
+kernel32 plus one registry read; on Linux it is /proc and /sys.
 """
 
 import ctypes
+import glob
 import os
 from ctypes import wintypes
 
-_KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+from core import system
+
+_KERNEL32 = (ctypes.WinDLL("kernel32", use_last_error=True)
+             if system.WINDOWS else None)
+
+
+def _meminfo_mb(key):
+    """A /proc/meminfo figure in MB, or None."""
+    try:
+        with open("/proc/meminfo", "r") as handle:
+            for line in handle:
+                name, _, rest = line.partition(":")
+                if name == key:
+                    return int(rest.split()[0]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _cpuinfo(key):
+    """The first value of *key* in /proc/cpuinfo, or ""."""
+    try:
+        with open("/proc/cpuinfo", "r") as handle:
+            for line in handle:
+                name, _, value = line.partition(":")
+                if name.strip() == key:
+                    return value.strip()
+    except OSError:
+        pass
+    return ""
 
 # SYSTEM_LOGICAL_PROCESSOR_INFORMATION.Relationship
 _RELATION_PROCESSOR_CORE = 0
@@ -35,6 +65,8 @@ class _MEMORYSTATUSEX(ctypes.Structure):
 
 
 def _memory_status():
+    if _KERNEL32 is None:
+        return None
     status = _MEMORYSTATUSEX()
     status.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
     if not _KERNEL32.GlobalMemoryStatusEx(ctypes.byref(status)):
@@ -44,6 +76,8 @@ def _memory_status():
 
 def total_ram_mb():
     """Installed memory in MB, or 8192 when it cannot be read."""
+    if not system.WINDOWS:
+        return _meminfo_mb("MemTotal") or 8192
     status = _memory_status()
     if status is None:
         return 8192
@@ -51,7 +85,14 @@ def total_ram_mb():
 
 
 def available_ram_mb():
-    """Free memory in MB right now, or half of installed when unreadable."""
+    """Free memory in MB right now, or half of installed when unreadable.
+
+    On Linux this is MemAvailable: free memory plus the page cache the kernel
+    would give up for an allocation, which is what a memory test can get.
+    """
+    if not system.WINDOWS:
+        available = _meminfo_mb("MemAvailable")
+        return available if available is not None else total_ram_mb() // 2
     status = _memory_status()
     if status is None:
         return total_ram_mb() // 2
@@ -83,6 +124,19 @@ def physical_cores():
     processors this undercounts; the Ex form that does not is a great deal of
     structure-walking for a number used to seed a default the user can edit.
     """
+    if not system.WINDOWS:
+        # One entry per core: a package and a core id. Hybrid parts with no
+        # SMT on the E-cores count right this way, where half the logical
+        # count would not.
+        cores = set()
+        for topology in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/topology"):
+            try:
+                with open(os.path.join(topology, "physical_package_id")) as a, \
+                        open(os.path.join(topology, "core_id")) as b:
+                    cores.add((a.read().strip(), b.read().strip()))
+            except OSError:
+                continue
+        return len(cores) or max(1, logical_cores() // 2)
     try:
         length = wintypes.DWORD(0)
         _KERNEL32.GetLogicalProcessorInformation(None, ctypes.byref(length))
@@ -112,6 +166,8 @@ def cpu_vendor():
     running the Intel build on Ryzen is the classic way to get a Linpack score
     that means nothing.
     """
+    if not system.WINDOWS:
+        return _cpuinfo("vendor_id")
     try:
         import winreg
 
@@ -126,6 +182,8 @@ def cpu_vendor():
 
 def cpu_name():
     """The marketing string, for the run header in the log."""
+    if not system.WINDOWS:
+        return _cpuinfo("model name") or "Unknown CPU"
     try:
         import winreg
 

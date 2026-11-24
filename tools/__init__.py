@@ -21,7 +21,7 @@ from tools.ramtest import RamTestPro
 from tools.testmem5 import TestMem5
 from tools.ycruncher import YCruncher
 
-TOOLS = (
+ALL_TOOLS = (
     Prime95(),
     YCruncher(),
     TestMem5(),
@@ -35,6 +35,11 @@ TOOLS = (
     MemtestVulkan(),
     ThreeDMark11(),
 )
+
+# The tools with a build for this system. On Linux that is Prime95 (mprime),
+# y-cruncher, OCCT and memtest_vulkan; the rest exist only for Windows, and a
+# tab promising a download that cannot run here would be a tab that lies.
+TOOLS = tuple(tool for tool in ALL_TOOLS if tool.supported())
 
 BY_KEY = {tool.key: tool for tool in TOOLS}
 

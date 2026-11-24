@@ -70,6 +70,8 @@ SEARCH_ROOTS = (
 
 class Cinebench(Tool):
     key = "cinebench"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "Cinebench"
     blurb = (
         "A sustained all-core render: the load that finds an unstable all-core "

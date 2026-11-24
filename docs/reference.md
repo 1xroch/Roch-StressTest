@@ -16,7 +16,8 @@ Roch StressTest/
 |   |- hardware.py         cores, RAM and CPU vendor, for the defaults
 |   |- memory.py           the memory cleaner and the live RAM readout
 |   |- settings.py         where runs, logs and settings are kept
-|   |- winui.py            finding a running tool's windows
+|   |- system.py           what differs between Windows and Linux
+|   |- winui.py            finding a running tool's windows (Windows)
 |   \- version.py          the product name and version, written once
 |
 |- app/                    how it is drawn
@@ -28,6 +29,8 @@ Roch StressTest/
 |   \- prime95.py, ycruncher.py, testmem5.py, ramtest.py, linpack.py,
 |                          occt.py, cinebench.py, memtest_vulkan.py,
 |                          threedmark11.py
+|
+|- packaging/linux/        fetch-tools.sh, install.sh, the launcher entry
 |
 \- <tool folders>          Prime95, y-cruncher, TestMem5, RAM Test Pro,
                            both Linpacks, memtest_vulkan. Cinebench and OCCT
@@ -56,6 +59,29 @@ Every other tool ships in this repository. These two cannot: they are too large 
 | **OCCT** | [ocbase.com — download](https://www.ocbase.com/download) | Put `OCCT.exe` in an `OCCT\` folder beside this program, or install it to `C:\Program Files\OCCT`. |
 
 Both folders are in `.gitignore`, so a copy dropped in is never committed. Copies kept inside BenchMate's app folder are deliberately not used: run outside BenchMate they cannot find their own text, and Cinebench 2024 comes up reading "StrNotFound".
+
+## Linux
+
+The same window and the same supervision -- time limits, failure patterns, stopping the whole process tree -- for the four tools that have a Linux build:
+
+| Tool | On Linux |
+|---|---|
+| **Prime95** | `mprime`, the same program without a GUI. It asks its questions in a terminal behind a main menu, so `16` (Options/Torture Test) is typed for it and it opens at the torture-test questions, as Prime95 opens at its dialog. `-W` and `results.txt` work as on Windows, so a failing worker is still caught. |
+| **y-cruncher** | The same command line. Profiles are one-line shell scripts (`<name>.sh`) beside `y-cruncher` instead of `.bat` files; `fetch-tools.sh` converts the ones that ship for Windows. Priority offers Below normal (-1, its default) and Normal (0, which y-cruncher calls maximum and which for anyone but root is ordinary priority). |
+| **memtest_vulkan** | The same, including `memtest_vulkan.log` beside it. |
+| **OCCT** | OCCT for Linux, put in an `OCCT` folder beside the program (`OCCT` or an `.AppImage`). Not bundled, as on Windows. |
+
+TestMem5, RAM Test Pro, both Linpacks, Cinebench and 3DMark 11 are Windows programs here and are left out of the window entirely on Linux, rather than shown as "not found".
+
+**A console tool gets a terminal window.** Windows gives a console child its own console with `CREATE_NEW_CONSOLE`; Linux has no such thing, so the tool is started inside a terminal emulator: `$ROCH_TERMINAL` if set, else `$TERMINAL` if it is one of foot, Alacritty, kitty, Ghostty, WezTerm, Konsole, GNOME Terminal, xfce4-terminal, xterm or `xdg-terminal-exec`, else the first of those installed. Each is started so that it stays in the foreground for as long as the tool runs. No terminal passes on its child's exit code, so the tool runs under a short shell wrapper that writes it to a file; when the terminal ends without that file, the window was closed before the tool finished, which is reported as stopped and never as a failure. Exit by SIGHUP, SIGINT or SIGTERM is treated the way Windows' `0xC000013A` is.
+
+**Stopping a run collects the whole tree first.** A tool inside a terminal is not in the terminal's process group -- the terminal gives it a session of its own -- so the descendants are read from `/proc` before anything is signalled, each is sent SIGTERM (mprime and y-cruncher finish cleanly on it), and anything still there five seconds later is killed.
+
+**No administrator rights and no memory cleaner.** None of the four tools needs root. The free-memory figure is `MemAvailable`, which already counts the page cache as available -- the kernel hands it over as soon as an allocation wants it -- so the standby-list problem the cleaner solves on Windows does not exist, and the button is not shown.
+
+**The tools are fetched, not committed.** y-cruncher's Linux build alone is 168 MB unpacked. `packaging/linux/fetch-tools.sh` downloads mprime, y-cruncher and memtest_vulkan from their authors' sites, checks each against a pinned SHA-256 and unpacks them beside the program; the release tarball already contains them. Settings, runs and logs live in `$XDG_DATA_HOME/RochStressTest` (normally `~/.local/share/RochStressTest`).
+
+Found while porting: memtest_vulkan's size argument is in **bytes**. The Memory to test box is in MB and was passed through unchanged, so any figure there made memtest_vulkan answer "requested test size is smaller than minimum wanted" and test nothing, on Windows too. It is now converted.
 
 ## What each tool does
 
@@ -177,6 +203,6 @@ Then, having finished its cycles, TM5 writes `Testing completed` and leaves its 
 
 ## Notes
 
-- Settings, run artifacts and logs live in `%LOCALAPPDATA%\RochStressTest\`. The unpacked tool folders are left byte-identical to what was downloaded.
+- Settings, run artifacts and logs live in `%LOCALAPPDATA%\RochStressTest\` (Linux: `~/.local/share/RochStressTest/`). The unpacked tool folders are left byte-identical to what was downloaded.
 - Closing the window stops whatever is running. There is never a stress test left going with no window to stop it.
 - The bundled tools are third-party and carry their own licences — see the readme in each folder. Roch StressTest itself is under `LICENSE`.

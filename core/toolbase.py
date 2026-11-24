@@ -15,6 +15,13 @@ UI tells the truth about it rather than pretending.
 
 import os
 import subprocess
+import sys
+
+from core import system
+
+# The flag a Windows console child is given its own console with. Linux has no
+# such flag; a spec carrying it is shown in a terminal window instead.
+CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
 
 
 class Field:
@@ -102,6 +109,7 @@ class LaunchSpec:
         duration_seconds=0,
         creation_flags=0,
         cmdline=None,
+        stdin_feed="",
         completion_patterns=(),
         abort_patterns=(),
         leave_open=False,
@@ -160,6 +168,14 @@ class LaunchSpec:
         # only y-cruncher and Linpack can limit their own run time.
         self.duration_seconds = duration_seconds
         self.creation_flags = creation_flags
+        # Shown in a window of its own: a new console on Windows, a terminal
+        # on Linux. Read from the flag every adapter already sets, so the
+        # adapters say it once for both systems.
+        self.new_console = bool(creation_flags & CREATE_NEW_CONSOLE)
+        # Linux only: text typed into the tool before its input is handed to
+        # the keyboard in its terminal. mprime is taken to its torture-test
+        # questions this way, the way Prime95's dialog opens on Windows.
+        self.stdin_feed = stdin_feed
 
 
 class ToolUnavailable(Exception):
@@ -172,6 +188,10 @@ class Tool:
     key = ""
     name = ""
     blurb = ""
+    # The systems this tool has a build for, as sys.platform names them. A
+    # Windows-only tool is left out of the window on Linux entirely rather
+    # than shown as "not found": there is nothing to download that would run.
+    platforms = ("win32", "linux")
     # Relative to the tools root: the first path that exists wins, so a
     # version bump that renames the folder only needs a pattern added.
     exe_globs = ()
@@ -213,6 +233,10 @@ class Tool:
             if matches:
                 return sorted(matches)[-1]
         return None
+
+    def supported(self):
+        """Whether this tool has a build for the system this is running on."""
+        return any(sys.platform.startswith(name) for name in self.platforms)
 
     def available(self, root):
         return self.locate(root) is not None
@@ -332,7 +356,8 @@ class Tool:
     @staticmethod
     def _write(path, text):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8", newline="\r\n") as handle:
+        with open(path, "w", encoding="utf-8",
+                  newline="\r\n" if system.WINDOWS else "\n") as handle:
             handle.write(text)
         return path
 
@@ -346,7 +371,7 @@ class Tool:
         stays blank -- so a tool shown this way is watched through a file
         instead, and each adapter arranges one.
         """
-        return getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
+        return CREATE_NEW_CONSOLE
 
     @staticmethod
     def _no_window_flags():

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Roch StressTest
+GenericName=Stress tester
+Comment=Prime95, y-cruncher, memtest_vulkan and OCCT in one window, timed and watched for errors
+Exec=rochstresstest
+Icon=RochStressTest
+Terminal=false
+Categories=System;Utility;
+StartupWMClass=Rochstresstest

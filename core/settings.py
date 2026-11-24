@@ -1,20 +1,22 @@
 """Per-user settings and the directory runs write into.
 
-Kept in LOCALAPPDATA rather than beside the executable so the program works
-from a read-only or Program Files install, and so a rebuild does not throw
-away the settings. Roch Viewer stores its settings the same way.
+Kept in LOCALAPPDATA (on Linux, $XDG_DATA_HOME or ~/.local/share) rather than
+beside the executable so the program works from a read-only or Program Files
+install, and so a rebuild does not throw away the settings. Roch Viewer stores
+its settings the same way.
 """
 
 import json
 import os
+
+from core import system
 
 APP_DIR_NAME = "RochStressTest"
 
 
 def app_data_dir():
     """The per-user directory this program owns, created on demand."""
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    path = os.path.join(base, APP_DIR_NAME)
+    path = os.path.join(system.data_home(), APP_DIR_NAME)
     os.makedirs(path, exist_ok=True)
     return path
 

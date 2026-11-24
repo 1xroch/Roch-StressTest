@@ -27,6 +27,7 @@ from core import hardware
 from core import memory as memory_module
 from core import runner as runner_module
 from core import settings
+from core import system
 from app import theme
 import tools as toolset
 from app import widgets
@@ -645,14 +646,22 @@ class StressApp:
     # -- chrome ----------------------------------------------------------
 
     def icon_path(self):
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+        # Tk on Linux takes a PNG through iconphoto, not an .ico.
+        name = "icon.ico" if system.WINDOWS else "icon.png"
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
         return path if os.path.exists(path) else None
 
     def set_window_icon(self):
         try:
             path = self.icon_path()
-            if path:
+            if path and system.WINDOWS:
                 self.root.iconbitmap(path)
+            elif path:
+                import tkinter
+
+                # Kept on self: Tk drops an image nothing in Python holds.
+                self._icon_image = tkinter.PhotoImage(file=path)
+                self.root.iconphoto(True, self._icon_image)
         except Exception as error:
             print("Error setting window icon: " + str(error))
 
@@ -716,10 +725,14 @@ class StressApp:
         # tests the memory it can actually get: Windows counts the standby
         # list as used, so on a machine that has been up a while, asking for
         # 28 GB quietly gets part of it from the page file instead.
-        self.clean_button = widgets.action_button(
-            bar, "Clean memory", self.clean_memory, width=120
-        )
-        self.clean_button.pack(side="right", padx=(4, 0), pady=3)
+        # Windows only: Linux already counts its cache as available (see
+        # core/memory.py), so there is nothing for the button to free.
+        self.clean_button = None
+        if memory_module.SUPPORTED:
+            self.clean_button = widgets.action_button(
+                bar, "Clean memory", self.clean_memory, width=120
+            )
+            self.clean_button.pack(side="right", padx=(4, 0), pady=3)
 
         self.ram_label = ctk.CTkLabel(
             bar, text="", font=theme.STATUS_FONT,
@@ -1226,12 +1239,18 @@ if __name__ == "__main__":
     # tools themselves still need administrator rights, so a run started this
     # way will fail in the tool rather than here -- it is for working on the
     # interface, not for running tests.
-    if "--no-elevate" not in sys.argv and not is_admin():
+    #
+    # Linux needs no elevation: mprime, y-cruncher, memtest_vulkan and OCCT
+    # all run as the person at the desk.
+    if (system.WINDOWS and "--no-elevate" not in sys.argv
+            and not is_admin()):
         print("Admin privileges required. Relaunching with UAC prompt...")
         run_as_admin()
-    root = ctk.CTk()
+    # The class names the window to the desktop, which matches it to the
+    # launcher entry (StartupWMClass) on Linux.
+    root = ctk.CTk(className="RochStressTest")
     app = StressApp(root)
-    if not is_admin():
+    if system.WINDOWS and not is_admin():
         app.log("Running without administrator rights: TestMem5 and RAM Test "
                 "Pro will not be able to lock memory.")
     root.mainloop()

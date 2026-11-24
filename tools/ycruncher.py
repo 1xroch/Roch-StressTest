@@ -13,6 +13,10 @@ The algorithm names come straight from Command Lines.txt in the distribution.
 Naming any algorithm disables the rest, which is why ticking none of them
 passes none at all rather than listing them: that is how y-cruncher is told
 to run the lot.
+
+On Linux the same y-cruncher takes the same command line. Its profiles are
+shell scripts rather than .bat files -- one line, run from the folder they sit
+in -- and it is shown in a terminal window rather than a console.
 """
 
 import glob
@@ -21,6 +25,7 @@ import re
 
 from core import errors
 from core import settings
+from core import system
 from core.toolbase import Field, LaunchSpec, Tool, ToolUnavailable
 
 # The valid values for [algorithm], in the order the manual lists them. N63,
@@ -43,13 +48,22 @@ ALGORITHM_NAMES = {name.upper(): name for name, _ in ALGORITHMS}
 ALGORITHM_NAMES.update({"VT3": "VSTv3", "VST": "VSTv3", "N63": "NTT63",
                         "N64": "NTT63", "SFT": "SFTv4", "FFT": "FFTv4"})
 
-# Windows priority values from the manual's Startup Parameters section.
-PRIORITIES = {
+# Priority values from the manual's Startup Parameters section. They differ by
+# system: on Linux 0 is "maximum", which for anyone but root is the ordinary
+# priority every other program runs at, and -1 is its default, the lowest.
+PRIORITIES = ({
     "Below normal": -1,
     "Normal": 0,
     "Above normal": 1,
     "High": 2,
-}
+} if system.WINDOWS else {
+    "Below normal": -1,
+    "Normal": 0,
+})
+
+# What a profile is saved as, and the program name a profile line calls.
+PROFILE_EXT = ".bat" if system.WINDOWS else ".sh"
+EXE_NAME = "y-cruncher.exe" if system.WINDOWS else "y-cruncher"
 
 # What y-cruncher runs at when a .bat says nothing about priority, so a
 # profile saved at this priority does not need to say it either.
@@ -75,7 +89,9 @@ class YCruncher(Tool):
         "finds an unstable memory clock quickly; the small in-cache tests "
         "stay on the core."
     )
-    exe_globs = ("y-cruncher*/y-cruncher.exe", "y-cruncher.exe")
+    exe_globs = (("y-cruncher*/y-cruncher.exe", "y-cruncher.exe")
+                 if system.WINDOWS else
+                 ("y-cruncher*/y-cruncher", "y-cruncher"))
     console = True
     # No detection note: the tab is a profile editor and is kept to the
     # profile and its settings. For the record, shown in its
@@ -111,11 +127,12 @@ class YCruncher(Tool):
                    "under-stresses it."),
         Field("extra", "Other options", "text", "",
               hint="Anything else to pass, exactly as y-cruncher takes it. "
-                   "Options before 'stress' in a .bat that this tab has no "
-                   "box for are kept here too."),
+                   "Options before 'stress' in a saved profile that this tab "
+                   "has no box for are kept here too."),
         Field("show_window", "Show y-cruncher's window", "bool", True,
-              hint="Only for Start on this tab; a saved .bat always shows "
-                   "it. Failures are read from its log file either way."),
+              hint="Only for Start on this tab; a saved profile always "
+                   "shows it. Failures are read from its log file either "
+                   "way."),
     )
 
     # What the Quick Start page runs, and what this tab opens on.
@@ -178,11 +195,11 @@ class YCruncher(Tool):
                 selected.append(canonical)
         return startup + ["stress"] + test + selected
 
-    profile_hint = ("Saved as <name>.bat beside y-cruncher.exe, and shown as "
-                    "a button on Quick Start.")
+    profile_hint = ("Saved as <name>" + PROFILE_EXT + " beside " + EXE_NAME
+                    + ", and shown as a button on Quick Start.")
 
     def profile_preview(self, config):
-        return " ".join(["y-cruncher.exe"] + self.profile_arguments(config))
+        return " ".join([EXE_NAME] + self.profile_arguments(config))
 
     @staticmethod
     def _gigabytes(text):
@@ -257,10 +274,18 @@ class YCruncher(Tool):
         name = self.clean_profile_name(name)
         if not exe or not name:
             raise ToolUnavailable("A profile needs a name and y-cruncher.")
-        path = os.path.join(os.path.dirname(exe), name + ".bat")
-        line = " ".join(["y-cruncher.exe"] + self.profile_arguments(config))
-        with open(path, "w", newline="\r\n") as handle:
-            handle.write(line + "\n")
+        path = os.path.join(os.path.dirname(exe), name + PROFILE_EXT)
+        line = " ".join([EXE_NAME] + self.profile_arguments(config))
+        if system.WINDOWS:
+            with open(path, "w", newline="\r\n") as handle:
+                handle.write(line + "\n")
+            return path
+        # Runnable by hand too: from its own folder, whatever the caller's.
+        with open(path, "w", newline="\n") as handle:
+            handle.write("#!/bin/sh\n"
+                         "# A y-cruncher profile saved by Roch StressTest.\n"
+                         'cd "$(dirname "$0")" && exec ./' + line + "\n")
+        os.chmod(path, 0o755)
         return path
 
     def bat_files(self, root):
@@ -274,7 +299,7 @@ class YCruncher(Tool):
         exe = self.locate(root)
         if not exe:
             return []
-        found = glob.glob(os.path.join(os.path.dirname(exe), "*.bat"))
+        found = glob.glob(os.path.join(os.path.dirname(exe), "*" + PROFILE_EXT))
         return sorted(found, key=lambda p: os.path.basename(p).lower())
 
     def quick_actions(self, root):
@@ -308,20 +333,27 @@ class YCruncher(Tool):
             return []
         for line in text.splitlines():
             stripped = line.strip()
-            if "y-cruncher" in stripped.lower() and ".exe" in stripped.lower():
-                parts = stripped.split()
-                for index, part in enumerate(parts):
-                    if part.lower().endswith("y-cruncher.exe") \
-                            or part.lower().endswith('y-cruncher.exe"'):
-                        return parts[index + 1:]
+            if not stripped or stripped.startswith(("#", "::")) \
+                    or stripped.lower().startswith("rem "):
+                continue
+            parts = stripped.split()
+            for index, part in enumerate(parts):
+                program = part.strip('"\'').lower()
+                if program.endswith("y-cruncher.exe") \
+                        or os.path.basename(program) == "y-cruncher":
+                    return parts[index + 1:]
         return []
 
     def build(self, config, root):
         exe = self.locate(root)
         if not exe:
             raise ToolUnavailable(
-                "y-cruncher.exe was not found. Expected a folder like "
-                "'y-cruncher v0.8.7.9547b' beside this program."
+                ("y-cruncher.exe was not found. Expected a folder like "
+                 "'y-cruncher v0.8.7.9547b' beside this program.")
+                if system.WINDOWS else
+                ("y-cruncher was not found. Expected a folder like "
+                 "'y-cruncher v0.8.7.9547-static' beside this program "
+                 "(packaging/linux/fetch-tools.sh puts it there).")
             )
 
         work = settings.run_dir("ycruncher")

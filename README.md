@@ -4,18 +4,27 @@ One window for every stress test on your PC. It starts each test with sensible d
 
 ## Install
 
+### Windows
+
 1. Download `RochStressTest-<version>.zip` from [Releases](https://github.com/1xroch/Roch-StressTest/releases).
 2. Unzip it to a folder you own.
 3. Run `RochStressTest.exe` and allow administrator access.
 
 Windows 10/11 x64. No Python needed. Cinebench and OCCT are too large to include. Get them from [Maxon](https://www.maxon.net/en/downloads/cinebench-downloads) and [OCBase](https://www.ocbase.com/download), and put them next to the app.
 
+### Linux
+
+1. Download `RochStressTest-<version>-linux-x86_64.tar.gz` from [Releases](https://github.com/1xroch/Roch-StressTest/releases).
+2. Unpack it and run `./install.sh`. That puts the app and its tools in `~/.local/opt/RochStressTest`, adds a `rochstresstest` command, and adds Roch StressTest to your launcher. No root needed.
+
+x86-64, glibc 2.35 or newer (Ubuntu 22.04, Fedora 36, current Arch). On Linux it runs **Prime95** (as `mprime`), **y-cruncher**, **memtest_vulkan** and **OCCT**; the rest are Windows-only here. Console tools open in your terminal emulator (foot, Alacritty, kitty, Ghostty, WezTerm, Konsole, GNOME Terminal, xfce4-terminal or xterm; set `ROCH_TERMINAL` to choose). OCCT is not included: download OCCT for Linux from [OCBase](https://www.ocbase.com/download) and put it in an `OCCT` folder beside the app.
+
 ## What it does
 
 - **Quick Start:** one click runs any tool's defaults.
 - **y-cruncher and Linpack Extended:** build and save your own profiles.
 - **TestMem5, RAM Test Pro, Prime95, OCCT, Cinebench, memtest_vulkan, Linpack Xtreme, 3DMark 11:** launched and watched for errors.
-- **Memory cleaner** and light/dark mode.
+- **Memory cleaner** (Windows) and light/dark mode.
 
 ## Credits
 

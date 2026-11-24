@@ -33,6 +33,8 @@ SEARCH_ROOTS = (
 # The definition file names, and what each one is for.
 class ThreeDMark11(Tool):
     key = "3dmark11"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "3DMark 11"
     blurb = (
         "A looping graphics load: shaders, geometry and the whole board at a "

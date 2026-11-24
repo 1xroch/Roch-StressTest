@@ -6,7 +6,7 @@ directory it came from.
 """
 
 APP_NAME = "Roch StressTest"
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Windows file-version resources want four numbers.
 VERSION_TUPLE = tuple(int(part) for part in __version__.split(".")) + (0,)

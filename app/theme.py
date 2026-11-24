@@ -52,8 +52,25 @@ STOP_COLOR = ("#B91C1C", "#5D1A1A")
 STOP_HOVER_COLOR = ("#991B1B", "#7A2626")
 
 # Consolas throughout, for the same reason Roch Viewer uses it: these panels
-# are full of numbers that want to line up in a column.
-FONT_FAMILY = "Consolas"
+# are full of numbers that want to line up in a column. Linux has no Consolas;
+# there the desktop's own monospace font is used, as fontconfig names it.
+def _monospace_family():
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        return "Consolas"
+    try:
+        family = subprocess.run(
+            ["fc-match", "-f", "%{family[0]}", "monospace"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        family = ""
+    return family or "DejaVu Sans Mono"
+
+
+FONT_FAMILY = _monospace_family()
 FONT_SIZE = 11
 
 GLOBAL_FONT = (FONT_FAMILY, FONT_SIZE)

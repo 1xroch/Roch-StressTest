@@ -65,3 +65,10 @@ ram_test_pro_*/**/license.bin
 # package, and the adapters clear them at the start of every run.
 ram_test_pro_*/**/logs/log.txt
 TestMem5/Log.txt
+
+# The Linux builds of the tools, fetched by packaging/linux/fetch-tools.sh from their authors'
+# sites rather than committed (y-cruncher's alone is 168 MB). The release tarball carries them.
+p95*.linux64/
+y-cruncher*-static/
+memtest_vulkan/memtest_vulkan
+memtest_vulkan/memtest_vulkan.log

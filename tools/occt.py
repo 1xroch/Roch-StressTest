@@ -19,6 +19,7 @@ the run to a limit if one was set and notice if it dies.
 
 import os
 
+from core import system
 from core.toolbase import Field, LaunchSpec, Tool, ToolUnavailable
 
 
@@ -33,11 +34,15 @@ class OCCT(Tool):
     )
 
     # A single portable executable, either beside this program or installed.
-    exe_globs = ("OCCT*/OCCT*.exe", "OCCT*.exe")
-    external_globs = (
+    exe_globs = (("OCCT*/OCCT*.exe", "OCCT*.exe") if system.WINDOWS else
+                 ("OCCT*/OCCT", "OCCT*/OCCT*.AppImage", "OCCT", "OCCT*.AppImage"))
+    external_globs = ((
         r"C:\Program Files\OCCT\OCCT*.exe",
         r"C:\Program Files (x86)\OCCT\OCCT*.exe",
-    )
+    ) if system.WINDOWS else (
+        os.path.expanduser("~/Applications/OCCT*.AppImage"),
+        os.path.expanduser("~/Applications/OCCT"),
+    ))
 
     # Configured in OCCT's own window, so there is no tab here.
     has_tab = False
@@ -70,7 +75,18 @@ class OCCT(Tool):
             raise ToolUnavailable(
                 "OCCT.exe was not found. It is a single portable executable "
                 "-- put it in an OCCT folder beside this program."
+                if system.WINDOWS else
+                "OCCT was not found. Download OCCT for Linux and put it in "
+                "an OCCT folder beside this program."
             )
+        if not system.WINDOWS and not os.access(exe, os.X_OK):
+            # A download arrives without the execute bit.
+            try:
+                os.chmod(exe, os.stat(exe).st_mode | 0o111)
+            except OSError as error:
+                raise ToolUnavailable(
+                    exe + " is not executable and could not be made so: "
+                    + str(error))
 
         return LaunchSpec(
             argv=[exe],

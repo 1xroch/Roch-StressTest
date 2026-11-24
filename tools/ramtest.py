@@ -32,6 +32,8 @@ WINDOW_TIMEOUT_SECONDS = 40
 
 class RamTestPro(Tool):
     key = "ramtest"
+    # Windows only: this program drives its Windows build.
+    platforms = ("win32",)
     name = "RAM Test Pro"
     blurb = (
         "A commercial memory test with its own error counters and a stop-on-"

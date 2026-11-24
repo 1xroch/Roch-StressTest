@@ -17,11 +17,18 @@ folder matters more than it looks. Prime95 writes prime.txt, results.txt and
 worker save files wherever it is told to work; sending them to LOCALAPPDATA
 leaves the unpacked p95 folder byte-identical to what was downloaded, and
 gives results.txt a stable path to watch for failures.
+
+On Linux the same program is mprime, with the same -W and the same files. It
+has no dialog: it asks its questions in the terminal instead, behind a main
+menu. "16" is typed for it -- Options/Torture Test -- so it opens at the
+torture-test questions, as Prime95 opens at its dialog, and everything after
+that is answered in its own window.
 """
 
 import os
 
 from core import settings
+from core import system
 from core.toolbase import Field, LaunchSpec, Tool, ToolUnavailable
 
 
@@ -32,7 +39,9 @@ class Prime95(Tool):
         "FFT torture test. Smallest and Small FFTs are the heat and power "
         "test; Large, Blend and Huge lean on the memory controller and RAM."
     )
-    exe_globs = ("p95*/prime95.exe", "prime95*/prime95.exe", "prime95.exe")
+    exe_globs = (("p95*/prime95.exe", "prime95*/prime95.exe", "prime95.exe")
+                 if system.WINDOWS else
+                 ("p95*/mprime", "mprime*/mprime", "mprime"))
     console = False
     detection_note = (
         "Failures are read from results.txt, which Prime95 writes on every "
@@ -67,7 +76,8 @@ class Prime95(Tool):
     def quick_summary(self, root):
         """The card has no preset to name, so it says what will happen."""
         limit = int(self.quick_config(root).get("duration", 0) or 0)
-        return "Opens its torture dialog" + (
+        return ("Opens its torture dialog" if system.WINDOWS
+                else "Opens its torture-test questions") + (
             "  |  " + str(limit) + " min" if limit else "")
 
     def build(self, config, root):
@@ -76,6 +86,10 @@ class Prime95(Tool):
             raise ToolUnavailable(
                 "prime95.exe was not found. Expected a folder like "
                 "p95v3019b20.win64 beside this program."
+                if system.WINDOWS else
+                "mprime was not found. Expected a folder like "
+                "p95v3019b20.linux64 beside this program "
+                "(packaging/linux/fetch-tools.sh puts it there)."
             )
 
         work = settings.run_dir("prime95")
@@ -112,12 +126,25 @@ class Prime95(Tool):
 
         # No -t: that would start a torture test from the file before there
         # was a chance to choose one.
+        if system.WINDOWS:
+            return LaunchSpec(
+                argv=[exe, "-W" + work],
+                cwd=os.path.dirname(exe),
+                console=False,
+                watch_files=[results],
+                error_key=self.key,
+                summary="Prime95 (test chosen in its own dialog)",
+                duration_seconds=int(config.get("duration", 0)) * 60,
+            )
+        # mprime, in a terminal, taken to Options/Torture Test.
         return LaunchSpec(
             argv=[exe, "-W" + work],
             cwd=os.path.dirname(exe),
             console=False,
             watch_files=[results],
             error_key=self.key,
-            summary="Prime95 (test chosen in its own dialog)",
+            summary="Prime95 (mprime; test chosen at its own prompts)",
             duration_seconds=int(config.get("duration", 0)) * 60,
+            creation_flags=self._new_console_flags(),
+            stdin_feed="16\n",
         )

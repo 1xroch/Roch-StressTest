@@ -1,8 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import re as _re
+import sys
 # PyInstaller spec for Roch StressTest.
-# Build with: py -m PyInstaller -y RochStressTest.spec
+# Build with: py -m PyInstaller -y RochStressTest.spec   (Windows)
+#             python3 -m PyInstaller -y RochStressTest.spec   (Linux)
+
+WINDOWS = sys.platform == "win32"
 
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -11,6 +15,8 @@ datas = collect_data_files('customtkinter')
 
 datas += [
     ('icon.ico', '.'),
+    # The window icon on Linux, where Tk takes a PNG rather than an .ico.
+    ('icon.png', '.'),
 ]
 
 # The tool adapters are reached through the registry in tools/__init__.py, which
@@ -19,6 +25,7 @@ datas += [
 # missing adapter shows up as a silently absent tab rather than as an error.
 hiddenimports = [
     'core.version',
+    'core.system',
     'customtkinter',
     'app.theme',
     'app.widgets',
@@ -61,16 +68,19 @@ a = Analysis(
 import io as _io
 import runpy as _runpy
 
-_version = _runpy.run_path(os.path.join("core", "version.py"))
-_numbers = ", ".join(str(part) for part in _version["VERSION_TUPLE"])
-_resource = _io.open("file_version_info.txt", encoding="utf-8").read()
-_resource = _re.sub(r"(file|prod)vers=\([^)]*\)",
-                    lambda m: m.group(1) + "vers=(" + _numbers + ")", _resource)
-_resource = _re.sub(r"(StringStruct\(u?'(?:File|Product)Version', u?')[^']*'",
-                    lambda m: m.group(1) + _version["__version__"] + "'",
-                    _resource)
-_io.open("file_version_info.txt", "w", encoding="utf-8",
-         newline="\n").write(_resource)
+# Windows only: the version resource and the UAC manifest are Windows things.
+if WINDOWS:
+    _version = _runpy.run_path(os.path.join("core", "version.py"))
+    _numbers = ", ".join(str(part) for part in _version["VERSION_TUPLE"])
+    _resource = _io.open("file_version_info.txt", encoding="utf-8").read()
+    _resource = _re.sub(r"(file|prod)vers=\([^)]*\)",
+                        lambda m: m.group(1) + "vers=(" + _numbers + ")",
+                        _resource)
+    _resource = _re.sub(
+        r"(StringStruct\(u?'(?:File|Product)Version', u?')[^']*'",
+        lambda m: m.group(1) + _version["__version__"] + "'", _resource)
+    _io.open("file_version_info.txt", "w", encoding="utf-8",
+             newline="\n").write(_resource)
 
 pyz = PYZ(a.pure)
 
@@ -93,10 +103,11 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico',
+    icon='icon.ico' if WINDOWS else None,
     # TestMem5 and RAM Test Pro need administrator rights to lock physical
     # pages, and Prime95 needs them to set affinity. Asking once at launch
-    # beats each tool failing differently three hours into a queue.
-    uac_admin=True,
-    version='file_version_info.txt',
+    # beats each tool failing differently three hours into a queue. Linux
+    # runs as the user: none of its tools needs root.
+    uac_admin=WINDOWS,
+    version='file_version_info.txt' if WINDOWS else None,
 )

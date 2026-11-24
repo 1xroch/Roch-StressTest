@@ -23,7 +23,13 @@ import threading
 import time
 
 from core import errors
-from core import winui
+from core import settings
+from core import system
+
+if system.WINDOWS:
+    from core import winui
+else:
+    winui = None
 
 IDLE = "idle"
 RUNNING = "running"
@@ -40,12 +46,10 @@ BROKEN = "broken"
 # for.
 STATUS_ACCESS_VIOLATION = 0xC0000005
 
-# 0xC000013A. Windows gives a console process this exit code when it is sent
-# Ctrl+C or Ctrl+Break, or when its console window is closed. It says nothing
-# about the health of the machine, so it must never be reported as a failure:
-# a stress tester that cries hardware fault when somebody shut a window is
-# worse than one that says nothing at all.
-STATUS_CONTROL_C_EXIT = 0xC000013A
+# Ctrl+C, a closed console, a terminal closed under the tool: none of these
+# says anything about the machine, so system.interrupted() decides them rather
+# than the bare exit code.
+STATUS_CONTROL_C_EXIT = system.STATUS_CONTROL_C_EXIT
 
 # How often the watcher wakes to poll log files and check the clock. Two
 # seconds is far below any useful test duration and keeps the thread asleep
@@ -136,44 +140,12 @@ class _FileTail:
 
 
 def _exit_code(code):
-    """An exit code as both numbers, since one of them is always the clue.
-
-    Windows status codes are recognisable in hex and meaningless in the
-    signed decimal Python reports: 3221225477 is nothing, 0xC0000005 is an
-    access violation.
-    """
-    try:
-        return "code %d (0x%08X)" % (code, code & 0xFFFFFFFF)
-    except (TypeError, ValueError):
-        return "code " + str(code)
+    """An exit code as text that says what happened (see system.describe_exit)."""
+    return system.describe_exit(code)
 
 
-def kill_tree(process):
-    """Stop a process and anything it started.
-
-    terminate() alone is not enough for the windowed tools, which ignore it,
-    and Prime95 leaves worker threads mid-FFT if it is killed rudely without
-    the tree being taken with it. taskkill /T /F is the one thing that
-    reliably ends all of them.
-    """
-    if process is None or process.poll() is not None:
-        return
-    try:
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            capture_output=True,
-            timeout=15,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except Exception:
-        pass
-    try:
-        process.wait(timeout=10)
-    except Exception:
-        try:
-            process.kill()
-        except Exception:
-            pass
+# Kept under this name for callers that stop a tool themselves.
+kill_tree = system.kill_tree
 
 
 class Runner:
@@ -196,6 +168,7 @@ class Runner:
         self.spec = None
         self.started_at = 0.0
         self.finding = ""
+        self._code_file = None
 
     # -- control ---------------------------------------------------------
 
@@ -215,8 +188,13 @@ class Runner:
         popen_args = {
             "cwd": spec.cwd,
             "env": spec.env,
-            "creationflags": spec.creation_flags,
         }
+        if system.WINDOWS:
+            popen_args["creationflags"] = spec.creation_flags
+        else:
+            # Its own session, so a Ctrl+C in the terminal this program was
+            # started from does not reach the test.
+            popen_args["start_new_session"] = True
         if spec.console:
             popen_args.update(
                 stdout=subprocess.PIPE,
@@ -227,9 +205,31 @@ class Runner:
 
         # A spec with a raw command line is handed to Windows verbatim; only
         # TestMem5 needs that, and only because of the shape of its arguments.
-        self._process = subprocess.Popen(
-            spec.cmdline if spec.cmdline else spec.argv, **popen_args
-        )
+        command = spec.cmdline if spec.cmdline else spec.argv
+
+        # Linux has no console to give a tool; it gets a terminal window, and
+        # its exit status comes back through a file (see system.in_terminal).
+        self._code_file = None
+        if not system.WINDOWS and spec.new_console and not spec.console:
+            self._code_file = os.path.join(settings.run_dir("runner"),
+                                           "exit-status")
+            try:
+                os.remove(self._code_file)
+            except OSError:
+                pass
+            wrapped = system.in_terminal(
+                command, label or spec.summary, self._code_file,
+                spec.stdin_feed)
+            if wrapped is None:
+                raise OSError(
+                    "No terminal emulator was found to show this tool in. "
+                    "Install one (foot, alacritty, kitty, konsole, "
+                    "gnome-terminal or xterm), or name yours in "
+                    "ROCH_TERMINAL.")
+            command = wrapped
+            popen_args["stdin"] = subprocess.DEVNULL
+
+        self._process = subprocess.Popen(command, **popen_args)
         self._set_state(RUNNING, label or spec.summary)
         self._thread = threading.Thread(
             target=self._supervise, name="stress-runner", daemon=True
@@ -409,7 +409,7 @@ class Runner:
                 outcome, note = STOPPED, "Stopped."
                 break
 
-            if not spec.console and not window_closed_first:
+            if winui is not None and not spec.console and not window_closed_first:
                 try:
                     windows = winui.windows_of(self._process.pid)
                 except Exception:
@@ -420,6 +420,16 @@ class Runner:
                     window_closed_first = True
 
             code = self._process.poll()
+            # A tool in a terminal: the code above is the terminal's. The
+            # tool's own is in the wrapper's file, and a missing file means
+            # the window was closed before the tool got to the end.
+            terminal_closed = False
+            if code is not None and self._code_file:
+                try:
+                    with open(self._code_file, "r") as handle:
+                        code = int(handle.read().strip())
+                except (OSError, ValueError):
+                    terminal_closed = True
             if code is not None:
                 # The last thing a tool writes is usually the thing worth
                 # reading: its verdict. Drain the pipe, and re-read the log
@@ -464,7 +474,12 @@ class Runner:
                 if outcome:
                     break
 
-                if code == STATUS_CONTROL_C_EXIT:
+                if terminal_closed:
+                    outcome, note = STOPPED, (
+                        "The tool's window was closed before it finished, so "
+                        "the test did not run to the end. This is not a "
+                        "hardware failure.")
+                elif system.interrupted(code):
                     # Its console was closed, or it was sent Ctrl+C or
                     # Ctrl+Break. That is somebody or something interrupting
                     # the test, not memory or a core giving a wrong answer,
@@ -472,8 +487,8 @@ class Runner:
                     # instability that was never there.
                     outcome, note = STOPPED, (
                         "The tool's console was closed or interrupted "
-                        "(Ctrl+C). This is not a hardware failure, and the "
-                        "test did not finish.")
+                        "(" + _exit_code(code) + "). This is not a hardware "
+                        "failure, and the test did not finish.")
                 # Checked before the plain non-zero case and after the
                 # clean one on purpose. A tool that finishes by itself also
                 # destroys its window on the way out, so a poll landing in
@@ -490,7 +505,7 @@ class Runner:
                     outcome, note = STOPPED, (
                         "The tool's window was closed, so the test did not "
                         "run to the end. It exited with "
-                        + _exit_code(code) + ", which is what Windows gives a "
+                        + _exit_code(code) + ", which is what a "
                         "program taken down that way and says nothing about "
                         "the machine.")
                 elif code != 0:

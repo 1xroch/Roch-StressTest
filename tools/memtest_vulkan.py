@@ -28,6 +28,7 @@ which is what the runner does anyway.
 import os
 
 from core import errors
+from core import system
 from core.toolbase import Field, LaunchSpec, Preset, Tool, ToolUnavailable
 
 
@@ -40,10 +41,15 @@ class MemtestVulkan(Tool):
         "artefacts and driver resets rather than as anything the CPU tests "
         "would notice."
     )
-    exe_globs = (
+    exe_globs = ((
         "memtest_vulkan*/memtest_vulkan*.exe",
         "memtest_vulkan*.exe",
-    )
+    ) if system.WINDOWS else (
+        # The exact name: a pattern would also match the .log it writes
+        # beside itself.
+        "memtest_vulkan*/memtest_vulkan",
+        "memtest_vulkan",
+    ))
     console = True
     detection_note = (
         "Output is read live. 'Error found' and 'Errors address range:' are "
@@ -101,9 +107,13 @@ class MemtestVulkan(Tool):
         exe = self.locate(root)
         if not exe:
             raise ToolUnavailable(
-                "memtest_vulkan was not found. Put memtest_vulkan-vX.Y.Z.exe "
-                "in a memtest_vulkan folder beside this program -- it is a "
-                "single file, from github.com/GpuZelenograd/memtest_vulkan."
+                ("memtest_vulkan was not found. Put memtest_vulkan-vX.Y.Z.exe "
+                 "in a memtest_vulkan folder beside this program -- it is a "
+                 "single file, from github.com/GpuZelenograd/memtest_vulkan.")
+                if system.WINDOWS else
+                ("memtest_vulkan was not found. Expected "
+                 "memtest_vulkan/memtest_vulkan beside this program "
+                 "(packaging/linux/fetch-tools.sh puts it there).")
             )
 
         folder = os.path.dirname(exe)
@@ -118,7 +128,10 @@ class MemtestVulkan(Tool):
         argv = [exe, str(int(config.get("device", 1)))]
         memory = int(config.get("memory", 0))
         if memory > 0:
-            argv.append(str(memory))
+            # In bytes, whatever the box is in: given 4096 it answers
+            # "requested test size is smaller than minimum wanted" and tests
+            # nothing (v0.5.0, checked on Linux; the same source on Windows).
+            argv.append(str(memory * 1024 * 1024))
 
         show = bool(config.get("show_window", True))
         return LaunchSpec(
