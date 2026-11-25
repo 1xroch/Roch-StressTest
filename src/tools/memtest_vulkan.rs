@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use crate::config::{Config, ConfigExt, config};
 use crate::errors;
+use crate::settings;
 use crate::tool::{Field, LaunchSpec, Preset, QuickActions, Tool, path_text};
 
 pub struct MemtestVulkan;
@@ -132,9 +133,11 @@ impl Tool for MemtestVulkan {
             "memtest_vulkan was not found. Expected memtest_vulkan/memtest_vulkan beside this program \
              (packaging/linux/fetch-tools.sh puts it there)."
         })?;
-        let folder = exe.parent().unwrap_or(root).to_path_buf();
-        // It appends to this across runs; the runner reads only what is added
-        // after the run starts, so the card's history is kept.
+        // It writes memtest_vulkan.log into the folder it is started from, so it is started from a
+        // run folder of this program's: the log is always somewhere it can write, even when the
+        // program is installed where only root can (a package's /opt), and it is read from there.
+        // It appends across runs; the runner reads only what is added after the run starts.
+        let folder = settings::run_dir("memtest_vulkan");
         let log = folder.join("memtest_vulkan.log");
 
         // The device index and the size as bare arguments, in that order. With

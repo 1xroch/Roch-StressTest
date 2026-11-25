@@ -82,9 +82,18 @@ impl YCruncher {
     pub fn profile_files(&self, root: &Path) -> Vec<PathBuf> {
         let Some(exe) = self.locate(root) else { return Vec::new() };
         let folder = exe.parent().unwrap_or(root);
-        let mut found = glob_files(&crate::tool::glob_in(folder, &format!("*.{PROFILE_EXT}")), true);
+        let mut found = Vec::new();
+        for dir in [folder.to_path_buf(), YCruncher::own_profiles()] {
+            found.extend(glob_files(&crate::tool::glob_in(&dir, &format!("*.{PROFILE_EXT}")), true));
+        }
         found.sort_by_key(|path| path.file_name().map(|name| name.to_string_lossy().to_lowercase()));
         found
+    }
+
+    /// Where profiles go when y-cruncher's own folder cannot be written: installed by a package,
+    /// it belongs to root. Profiles from both places are listed.
+    fn own_profiles() -> PathBuf {
+        settings::app_data_dir().join("y-cruncher profiles")
     }
 
     fn stem(path: &Path) -> String {
@@ -169,12 +178,15 @@ impl YCruncher {
                 continue;
             }
             let parts: Vec<&str> = line.split_whitespace().collect();
-            for (index, part) in parts.iter().enumerate() {
+            // The last token naming y-cruncher is the program: a folder before it on the line
+            // ("cd '/opt/.../y-cruncher v0.8.7.9547-static'") can be named y-cruncher too.
+            let program = parts.iter().rposition(|part| {
                 let program = part.trim_matches(['"', '\'']).to_ascii_lowercase();
-                let base = program.rsplit(['/', '\\']).next().unwrap_or(&program);
-                if base == "y-cruncher.exe" || base == "y-cruncher" {
-                    return parts[index + 1..].iter().map(|part| part.to_string()).collect();
-                }
+                let base = program.rsplit(['/', '\\']).next().unwrap_or(&program).to_string();
+                base == "y-cruncher.exe" || base == "y-cruncher"
+            });
+            if let Some(index) = program {
+                return parts[index + 1..].iter().map(|part| part.to_string()).collect();
             }
         }
         Vec::new()
@@ -363,13 +375,21 @@ impl Tool for YCruncher {
         if name.is_empty() {
             return Err("A profile needs a name.".into());
         }
-        let path = exe.parent().unwrap_or(root).join(format!("{name}.{PROFILE_EXT}"));
-        let line = format!("{EXE_NAME} {}", YCruncher::profile_arguments(config).join(" "));
+        let beside = exe.parent().unwrap_or(root).to_path_buf();
+        let folder = if crate::tool::writable(&beside) { beside } else { YCruncher::own_profiles() };
+        let _ = std::fs::create_dir_all(&folder);
+        let path = folder.join(format!("{name}.{PROFILE_EXT}"));
+        let arguments = YCruncher::profile_arguments(config).join(" ");
         let text = if cfg!(windows) {
-            format!("{line}\r\n")
-        } else {
+            format!("{EXE_NAME} {arguments}\r\n")
+        } else if folder == exe.parent().unwrap_or(root) {
             // Runnable by hand too: from its own folder, whatever the caller's.
-            format!("#!/bin/sh\n# A y-cruncher profile saved by Roch StressTest.\ncd \"$(dirname \"$0\")\" && exec ./{line}\n")
+            format!(
+                "#!/bin/sh\n# A y-cruncher profile saved by Roch StressTest.\ncd \"$(dirname \"$0\")\" && exec ./{EXE_NAME} {arguments}\n"
+            )
+        } else {
+            let dir = exe.parent().unwrap_or(root).display().to_string().replace('\'', "'\\''");
+            format!("#!/bin/sh\n# A y-cruncher profile saved by Roch StressTest.\ncd '{dir}' && exec ./{EXE_NAME} {arguments}\n")
         };
         std::fs::write(&path, text).map_err(|error| format!("{}: {error}", path.display()))?;
         #[cfg(unix)]
@@ -381,7 +401,10 @@ impl Tool for YCruncher {
     }
 
     fn profile_hint(&self) -> String {
-        format!("Saved as <name>.{PROFILE_EXT} beside {EXE_NAME}, and shown as a button on Quick Start.")
+        format!(
+            "Saved as <name>.{PROFILE_EXT} beside {EXE_NAME} (in your Roch StressTest folder when that cannot be written), \
+             and shown as a button on Quick Start."
+        )
     }
 
     fn profile_preview(&self, config: &Config) -> String {
@@ -547,5 +570,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(YCruncher::profile_file_arguments(&script), ["pause:1", "stress", "-TL:1800", "SFT"]);
+
+        // Saved in the user's folder for a y-cruncher that cannot be written beside: the folder,
+        // which is named y-cruncher too, is not mistaken for the program.
+        let elsewhere = dir.path().join("vt3.sh");
+        std::fs::write(
+            &elsewhere,
+            "#!/bin/sh\ncd '/opt/roch-stresstest/y-cruncher v0.8.7.9547-static' && exec ./y-cruncher pause:1 stress VT3\n",
+        )
+        .unwrap();
+        assert_eq!(YCruncher::profile_file_arguments(&elsewhere), ["pause:1", "stress", "VT3"]);
     }
 }

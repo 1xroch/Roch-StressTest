@@ -378,6 +378,14 @@ pub fn clean_profile_name(name: &str) -> String {
     kept.trim().trim_matches('.').trim().to_string()
 }
 
+/// Whether this program can create files in `folder`.
+pub fn writable(folder: &Path) -> bool {
+    let probe = folder.join(format!(".roch-stresstest-write-{}", std::process::id()));
+    let ok = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
+}
+
 /// Remove a file if it is there; a run's leftover log must never be mistaken
 /// for this run's.
 pub fn remove_stale(path: &Path) {
