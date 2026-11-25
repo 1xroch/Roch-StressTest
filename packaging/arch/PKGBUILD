@@ -1,0 +1,52 @@
+# Maintainer: Roch Studio <300260898+1xroch@users.noreply.github.com>
+
+# Installs the program published with a release, with the Linux tools it runs beside it in
+# /opt/roch-stresstest: Prime95 (mprime), y-cruncher and memtest_vulkan, as the release fetched them
+# from their authors and checked by hash. It looks for its tools beside itself; the command in
+# /usr/bin is a link to it. Nothing is compiled, and nothing runs as root.
+
+pkgname=roch-stresstest-bin
+pkgver=1.1.0
+pkgrel=1
+pkgdesc='Every stress test in one window: Prime95, y-cruncher, memtest_vulkan and OCCT, timed and watched for errors'
+arch=(x86_64)
+url='https://github.com/1xroch/Roch-StressTest'
+# The program, then the tools bundled with it under their own terms.
+license=(GPL-3.0-or-later LicenseRef-Prime95 LicenseRef-y-cruncher Zlib)
+# mprime is linked against the system's GMP.
+depends=(glibc libgcc hicolor-icon-theme gmp)
+optdepends=(
+  'libglvnd: the window'
+  'libxkbcommon: the window'
+  'wayland: the window on Wayland'
+  'libx11: the window on X11'
+  'libxcursor: the window on X11'
+  'libxi: the window on X11'
+  'libxkbcommon-x11: the window on X11'
+  'fontconfig: the system fonts'
+  'xdg-utils: opening links from the window'
+  'vulkan-icd-loader: memtest_vulkan, the graphics memory test'
+  'foot: a terminal for the console tools (alacritty, kitty, ghostty, konsole, gnome-terminal or xterm work too)'
+)
+provides=(roch-stresstest)
+conflicts=(roch-stresstest)
+options=(!debug !strip)
+install=roch-stresstest.install
+_dir="RochStressTest-$pkgver-linux-x86_64"
+source=("$_dir.tar.gz::$url/releases/download/v$pkgver/$_dir.tar.gz")
+sha256sums=('1bbaed1fed3e14ff9c93c6d796d3f891cc132dbec1da73763702d9f7297c944f')
+
+package() {
+  cd "$_dir"
+  local opt="$pkgdir/opt/roch-stresstest"
+  install -d "$opt"
+  install -m755 RochStressTest "$opt/RochStressTest"
+  cp -a p95v3019b20.linux64 "y-cruncher v0.8.7.9547-static" memtest_vulkan "$opt/"
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/roch-stresstest/RochStressTest "$pkgdir/usr/bin/rochstresstest"
+  install -Dm644 RochStressTest.desktop "$pkgdir/usr/share/applications/RochStressTest.desktop"
+  install -Dm644 RochStressTest.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/RochStressTest.png"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/roch-stresstest/README.md"
+  install -Dm644 p95v3019b20.linux64/license.txt "$pkgdir/usr/share/licenses/$pkgname/Prime95.txt"
+  install -Dm644 "y-cruncher v0.8.7.9547-static/Read Me.txt" "$pkgdir/usr/share/licenses/$pkgname/y-cruncher.txt"
+}

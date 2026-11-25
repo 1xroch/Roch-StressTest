@@ -1,0 +1,7 @@
+post_install() {
+  cat <<'END'
+Roch StressTest is in /opt/roch-stresstest, with mprime, y-cruncher and memtest_vulkan.
+OCCT is not included: download OCCT for Linux from https://www.ocbase.com/download into
+~/Applications. y-cruncher profiles you save go to ~/.local/share/RochStressTest.
+END
+}
