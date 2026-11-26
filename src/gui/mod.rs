@@ -33,7 +33,7 @@ use widgets::{action_button, hint, section};
 const LOG_LIMIT: usize = 4000;
 
 const SOCIAL_LINKS: [(&str, &str); 3] =
-    [("YouTube", "https://www.youtube.com/@MateoPcTech"), ("X", "https://x.com/MateoPCTech"), ("Discord", "https://discord.gg/KfzExpKQHB")];
+    [("YouTube", "https://www.youtube.com/@MateoPcTech"), ("X", "https://x.com/1xroch"), ("Discord", "https://discord.gg/KfzExpKQHB")];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {

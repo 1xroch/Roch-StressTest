@@ -46,6 +46,6 @@ Put `RochStressTest` (`.exe` on Windows) next to the tool folders. On Linux, `pa
 - **OCBase — [OCCT](https://www.ocbase.com/)**, **Maxon — [Cinebench](https://www.maxon.net/en/cinebench)**, **UL — 3DMark 11**
 - **[egui](https://github.com/emilk/egui)** for the window
 
-Created by **Roch Studio / [@MateoPCTech](https://x.com/MateoPCTech)**. Licensed GPL-3.0; bundled tools keep their own licenses.
+Created by **Roch Studio / [@1xroch](https://x.com/1xroch)**. Licensed GPL-3.0; bundled tools keep their own licenses.
 
-[YouTube](https://www.youtube.com/@MateoPcTech) | [X](https://x.com/MateoPCTech) | [Discord](https://discord.gg/KfzExpKQHB)
+[YouTube](https://www.youtube.com/@MateoPcTech) | [X](https://x.com/1xroch) | [Discord](https://discord.gg/KfzExpKQHB)
