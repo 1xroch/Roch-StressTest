@@ -5,7 +5,7 @@ edition = "2021"
 description = "Roch StressTest - one window for every stress test on your PC"
 authors = ["Roch Studio"]
 license = "GPL-3.0-only"
-repository = "https://github.com/RochStudio/Roch-StressTest"
+repository = "https://github.com/1xroch/Roch-StressTest"
 build = "build.rs"
 # The tool folders beside the sources are third-party distributions, not part
 # of the crate.

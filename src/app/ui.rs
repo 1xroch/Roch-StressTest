@@ -41,7 +41,7 @@ pub const RAM_MS: u64 = 1000;
 
 pub const SOCIAL_LINKS: [(&str, &str); 3] = [
     ("YouTube", "https://www.youtube.com/@MateoPcTech"),
-    ("X", "https://x.com/MateoPCTech"),
+    ("X", "https://x.com/1xroch"),
     ("Discord", "https://discord.gg/KfzExpKQHB"),
 ];
 

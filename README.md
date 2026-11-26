@@ -4,7 +4,7 @@ One window for every stress test on your PC. It starts each test with sensible d
 
 ## Install
 
-1. Download `RochStressTest-<version>.zip` from [Releases](https://github.com/RochStudio/Roch-StressTest/releases).
+1. Download `RochStressTest-<version>.zip` from [Releases](https://github.com/1xroch/Roch-StressTest/releases).
 2. Unzip it to a folder you own.
 3. Run `RochStressTest.exe` and allow administrator access.
 
@@ -39,6 +39,6 @@ That runs `cargo build --release` and copies `RochStressTest.exe` next to the to
 - **OCBase — [OCCT](https://www.ocbase.com/)**, **Maxon — [Cinebench](https://www.maxon.net/en/cinebench)**, **UL — 3DMark 11**
 - **Emil Ernerfeldt and contributors — [egui / eframe](https://github.com/emilk/egui)**, the window toolkit
 
-Created by **Roch Studio / [@MateoPCTech](https://x.com/MateoPCTech)**. Licensed GPL-3.0; bundled tools keep their own licenses.
+Created by **Roch Studio / [@1xroch](https://x.com/1xroch)**. Licensed GPL-3.0; bundled tools keep their own licenses.
 
-[YouTube](https://www.youtube.com/@MateoPcTech) | [X](https://x.com/MateoPCTech) | [Discord](https://discord.gg/KfzExpKQHB)
+[YouTube](https://www.youtube.com/@MateoPcTech) | [X](https://x.com/1xroch) | [Discord](https://discord.gg/KfzExpKQHB)
